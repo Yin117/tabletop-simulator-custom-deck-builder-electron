@@ -7,3 +7,5 @@ IN-DEVELOPMENT - Tabletop Simulator Custom Deck Builder, download the applicatio
 Creation Process:
 - https://www.electronforge.io/templates/typescript-+-webpack-template
   - `npm init electron-app@latest my-new-app -- --template=webpack-typescript`
+- Install various `@types/*` modules
+- 
