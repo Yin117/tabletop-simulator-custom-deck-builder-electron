@@ -1,0 +1,1 @@
+export const fs = window.require ? window.require('fs') : undefined;
