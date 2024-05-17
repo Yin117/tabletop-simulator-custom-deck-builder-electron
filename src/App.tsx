@@ -14,20 +14,16 @@ import { FileContent } from 'use-file-picker/dist/interfaces';
 // USE FILE PICKER
 import { Route, Routes } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
-import { Toolbar, Typography } from '@mui/material';
+import { Button, Slider, Toolbar, Typography } from '@mui/material';
 import { navURLs } from './consts/navigationConsts';
 import { ImagesRenderer } from './components/ImagesRenderer';
 
 // https://stackoverflow.com/questions/31869471/loading-clients-images-into-a-canvas
 // Try this
 
-const cardDims = {
-  width: 479,
-  height: 671,
-};
-
-
 function downloadCanvasAsImage(canvas: HTMLCanvasElement, filename: string) {
+  console.log('downloadCanvasAsImage');
+
 	/** https://enjeck.com/blog/download-canvas-image/ */
 
 	// Grab the canvas element
@@ -63,20 +59,19 @@ async function addImageToCanvas(
   width: number,
   height: number,
 ) {
-  console.log(`addImageToCanvas(canvas, '${src?.substring(0, 20)}...', ${x}, ${y}, ${width}, ${height})`, {
-    canvas,
-    src,
-    x,
-    y,
-    width,
-    height,
-  });
+  // console.log(`addImageToCanvas(canvas, '${src?.substring(0, 20)}...', ${x}, ${y}, ${width}, ${height})`, {
+  //   canvas,
+  //   src,
+  //   x,
+  //   y,
+  //   width,
+  //   height,
+  // });
   return new Promise((resolve, reject) => {
     const img2 = new Image();
     try {
       img2.onload = function () {
         canvas?.drawImage(img2, x, y, width, height);
-        console.log('onLoad ran');
         resolve(true);
       };
       img2.src = src;
@@ -87,29 +82,60 @@ async function addImageToCanvas(
   });
 }
 
-async function envoke(filesContent: FileContent<string>[]) {
-  console.log('envoke');
+async function compileCanvas(
+  filesContent: FileContent<string>[],
+  sheetWidth: number,
+  sheetHeight: number,
+  cardWidth: number,
+  cardHeight: number
+) {
+  console.log('compileCanvas', {
+    filesContent,
+    sheetWidth,
+    sheetHeight,
+    cardWidth,
+    cardHeight,
+  });
   const canvas = (document.getElementById('the-canvas') as HTMLCanvasElement).getContext('2d') as CanvasRenderingContext2D;
 
-  let i = 0;
-  for (const file of filesContent) {
+  let x = 0;
+  let y = 0;
+  for (let i = 0; i < filesContent.length; i++) {
+    const file = filesContent[i];
+
+    const posX = cardWidth * x;
+    const posY = cardHeight * y;
+    console.log(`addImage ${i} to (${posX}, ${posY})`, { x, y })
     await addImageToCanvas(
       canvas,
       file.content,
-      cardDims.width * i, // x
-      0, // y
-      cardDims.width,
-      cardDims.height
+      posX, // x
+      posY, // y
+      cardWidth, // width
+      cardHeight // height
     );
 
-    // ++
-    i++;
+    if ((i + 1) % sheetWidth === 0) {
+      y++;
+      x = 0;
+    } else {
+      x++;
+    }
+
   }
 }
 
 export function App() {
 
-  const { openFilePicker, filesContent, plainFiles, loading, errors } = useFilePicker({
+  const [filesLoadedTrigger, setFilesLoadedTrgger] = useState(0);
+
+  const [firstCardWidth, setFirstCardWidth] = useState(0);
+  const [firstCardHeight, setFirstCardHeight] = useState(0);
+
+  const [sheetWidth, setSheetWidth] = useState(10);
+  const [sheetHeight, setSheetHeight] = useState(7);
+
+  const { openFilePicker, filesContent, plainFiles, loading, errors, clear  } = useFilePicker({
     readAs: 'DataURL',
     accept: 'image/*',
     multiple: true,
@@ -124,18 +150,24 @@ export function App() {
         minWidth: 1,
       }),
     ],
+    onFilesSuccessfullySelected: () => {
+      console.log('onFilesSuccessfullySelected');
+
+      setFilesLoadedTrgger(filesLoadedTrigger + 1);
+    }
   });
-
-  const [firstCardWidth, setFirstCardWidth] = useState(0);
-  const [firstCardHeight, setFirstCardHeight] = useState(0);
-
   useEffect(() => {
     const elm = document.getElementById('first-image') as HTMLImageElement;
     if (elm) {
       setFirstCardWidth(elm.naturalWidth);
       setFirstCardHeight(elm.naturalHeight);
+    } else {
+      console.log('Could not find first image');
     }
-  }, [!!filesContent, filesContent.length]);
+    // if (filesContent.length) {
+    //   compileCanvas(filesContent, sheetWidth, sheetHeight);
+    // }
+  }, [filesLoadedTrigger])
 
   if (firstCardHeight) {
     console.log(`First image is ${firstCardWidth}x${firstCardHeight}`);
@@ -147,7 +179,24 @@ export function App() {
 
   if (errors.length) {
     console.log('errors', errors);
-    return <div>Error...</div>;
+    return (
+      <div>
+        <Typography variant="h3">
+          Errored
+        </Typography>
+        <Button onClick={clear}>Clear Files</Button>
+        {/* {errors.length === 1 &&
+        <Typography>{errors[0].reason}</Typography>
+        }
+        {errors.length > 1 &&
+        <ul>
+          {
+            errors.map(({ reason }) => <li>{reason}</li>)
+          }
+        </ul>
+        } */}
+      </div>
+    );
   }
 
 
@@ -172,6 +221,9 @@ export function App() {
   //     )
   //   });
 
+
+  console.log('Canvas Key', [firstCardWidth, firstCardHeight, sheetWidth, sheetHeight]);
+
   return (
     <>
       <AppBar position="static">
@@ -186,16 +238,89 @@ export function App() {
         <Route
           path={navURLs.home()}
           element={
-            <div>
-              Home
-
-              <button onClick={() => openFilePicker()}>Select files</button>
-              <br />
-              {
-                !!filesContent.length &&
-                <button onClick={() => envoke(filesContent)}>Compile Canvas</button>
-              }
-              <button
+            <div style={{ padding: '12px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                }}
+              >
+                <Typography variant="body1">Width {sheetWidth}</Typography>
+                <Slider
+                  defaultValue={10}
+                  step={1}
+                  min={1}
+                  max={10}
+                  aria-label="Width"
+                  value={sheetWidth}
+                  onChange={(ev, newVal) => {
+                    if (newVal instanceof Array) {
+                      return;
+                    }
+                    setSheetWidth(newVal)
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                }}
+              >
+                <Typography variant="body1">Height {sheetHeight}</Typography>
+                <Slider
+                  defaultValue={7}
+                  step={1}
+                  min={1}
+                  max={7}
+                  aria-label="Height"
+                  value={sheetHeight}
+                  onChange={(ev, newVal) => {
+                    if (newVal instanceof Array) {
+                      return;
+                    }
+                    setSheetHeight(newVal)
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  marginBottom: '12px'
+                }}
+              >
+                <Button
+                  variant="contained"
+                  onClick={() => openFilePicker()}
+                  style={{
+                    marginRight: '12px',
+                  }}
+                >
+                  Select files
+                </Button>
+                <Typography>
+                  {filesContent.length} file{filesContent.length === 1 ? '' : 's'}
+                </Typography>
+              </div>
+              
+              <Button
+                variant="contained"
+                onClick={
+                  () =>
+                    compileCanvas(filesContent, sheetWidth, sheetHeight, firstCardWidth, firstCardHeight)
+                }
+                disabled={!filesContent.length}
+                style={{
+                  margin: '0 12px 12px 0',
+                }}
+              >
+                Compile Canvas
+              </Button>
+              
+              <Button
+                variant="contained"
                 onClick={
                   () =>
                     downloadCanvasAsImage(
@@ -203,12 +328,37 @@ export function App() {
                       'Deck.jpg'
                     )
                 }
+                disabled={!filesContent.length}
+                style={{
+                  margin: '0 12px 12px 0',
+                }}
               >
                 Download Canvas
-              </button>
-              <canvas id="the-canvas" width={filesContent.length * cardDims.width} height={cardDims.height} />
+              </Button>
+
+              <Typography
+                variant="overline"
+              >
+                (The below is not a preview, and just a view of the files)
+              </Typography>
+
+              {/* IMAGES PREVIEW */}
               <ImagesRenderer
                 filesContent={filesContent}
+                cardWidth={firstCardWidth}
+                cardHeight={firstCardHeight}
+              />
+
+              {/* HIDDEN */}
+              <canvas
+                id="the-canvas"
+                key={[firstCardWidth, firstCardHeight, sheetWidth, sheetHeight].join('-')}
+                width={firstCardWidth * sheetWidth}
+                height={firstCardHeight * sheetHeight}
+                style={{
+                  // display: 'none'
+                  outline: '1px solid red',
+                }}
               />
             </div>
           }
